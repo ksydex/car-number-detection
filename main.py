@@ -228,11 +228,11 @@ def main(
                     is None
                 ):
 
-                    car[0] = [plate_coords, plate_text + "_OK"]
+                    car[0] = [plate_coords, plate_text + "_RUSSIAN_PLATE"]
 
                 else:
 
-                    car[0] = [plate_coords, plate_text + "_NOK"]
+                    car[0] = [plate_coords, plate_text + "_UNDEFINED"]
 
                 cars.append(car)
 
@@ -240,6 +240,8 @@ def main(
         proc_frame = preprocess(drawn_frame, settings.FINAL_FRAME_RES)
 
         time_end = time.time()
+
+        print('time end: ',time_end)
 
         cv2.imshow("video", proc_frame)
         
