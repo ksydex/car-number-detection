@@ -22,9 +22,20 @@ class ObjectDetection:
         self.__model_path = model_path
         self.model = self.load_model()
 
+        # Basic detection parameters
         self.model.conf = conf
         self.model.iou = iou
-
+        
+        # Balanced settings for both near and distant object detection
+        self.model.max_det = 50  # Moderate max detections to avoid too many false positives
+        self.model.agnostic = True  # Class-agnostic NMS
+        self.model.multi_label = False  # Single best label per box for cleaner detection
+        
+        # Enhanced parameters for balanced detection
+        self.model.classes = None  # Detect all classes
+        self.model.min_wh = 2  # Minimum width and height for detection (in pixels)
+        self.model.max_wh = 7680  # Maximum width and height for detection
+        
         self.device = device
 
     def load_model(self):
@@ -44,7 +55,15 @@ class ObjectDetection:
         :return: labels and coordinates of objects found.
         """
         self.model.to(self.device)
-        results = self.model([frame])
+        
+        # Set input image to original frame dimensions 
+        # YOLOv5 has built-in letterboxing that handles multiple scales well
+        frame_height, frame_width = frame.shape[:2]
+        
+        # Use a balanced inference size (1024) for both near and distant objects
+        results = self.model([frame], size=1024)
+        
+        # Process all detections
         labels, cord = (
             results.xyxyn[0][:, -1].to("cpu").numpy(),
             results.xyxyn[0][:, :-1].to("cpu").numpy(),

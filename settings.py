@@ -1,6 +1,6 @@
 import os
-
 import torch
+from detection_level import DetectionLevel
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -17,10 +17,17 @@ LPR_MODEL_PATH = os.environ.get(
     os.path.normpath("lpr_net/model/weights/LPRNet__iteration_2000_28.09.pth")
 )
 
-YOLO_CONF = 0.5
-YOLO_IOU = 0.4
+# Balanced confidence threshold for both near and distant objects
+YOLO_CONF = 0.4
+# Lower IoU threshold for better overlap handling
+YOLO_IOU = 0.3
 LPR_MAX_LEN = 9
 LPR_DROPOUT = 0
 
-FINAL_FRAME_RES = (640, 480)
-DETECTION_AREA = [(0, 650), (1920, 1000)]
+# Higher resolution for better detection while still handling close objects
+FINAL_FRAME_RES = (1280, 720)
+# Full frame detection area (assuming 1920x1080 video)
+DETECTION_AREA = [(0, 0), (1920, 1080)]
+
+# Default detection level - only render vehicles with license plates
+DETECTION_LEVEL = DetectionLevel.LICENSE_PLATE
