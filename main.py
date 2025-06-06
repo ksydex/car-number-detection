@@ -1,5 +1,6 @@
 import time
 import re
+import warnings
 
 import cv2
 import numpy as np
@@ -13,6 +14,14 @@ from track_logic import check_numbers_overlaps
 from detection_level import DetectionLevel
 
 import settings
+from database import SessionLocal
+from services.car_passage_service import CarPassageService
+
+# Игнорируем конкретное предупреждение от PyTorch
+warnings.filterwarnings(
+    "ignore",
+    message="`torch.cuda.amp.autocast.*is deprecated"
+)
 
 def get_frames(video_src: str) -> np.ndarray:
     """
@@ -229,6 +238,16 @@ def main(
     ):
 
     cv2.startWindowThread()
+    
+    # --- Database Connection ---
+    db_session = SessionLocal()
+    passage_service = CarPassageService(db_session)
+    if not passage_service.test_connection():
+        print("CRITICAL: Could not connect to the database. Exiting.")
+        db_session.close()
+        return
+    # -------------------------
+
     detector = ObjectDetection(
         yolo_model_path, 
         conf=yolo_conf, 
@@ -295,8 +314,13 @@ def main(
                         is None
                     ):
                         car[0] = [plate_coords, plate_text + "_RUSSIAN_PLATE"]
+                        # --- Fixate Car Passage ---
+                        result = passage_service.fixate_car_passage(plate_text)
+                        print(f"INFO: Passage fixation for plate '{plate_text}': {result.name}")
+                        # --------------------------
                     else:
                         car[0] = [plate_coords, plate_text + "_UNDEFINED"]
+
 
                     cars.append(car)
             # Process cars without plates (when detection_level is CAR_ONLY)
@@ -318,7 +342,7 @@ def main(
 
         time_end = time.time()
 
-        print('time end: ',time_end)
+        # print('time end: ',time_end)
 
         cv2.imshow("video", proc_frame)
         
@@ -328,6 +352,8 @@ def main(
 
         if cv2.waitKey(30) & 0xFF == ord("q"):
             break
+
+    db_session.close()
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import os
 import torch
 from detection_level import DetectionLevel
 
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda'# 'cuda' if torch.cuda.is_available() else 'cpu'
 
 FILE_PATH = os.environ.get(
     'file_path', 
@@ -31,3 +31,6 @@ DETECTION_AREA = [(0, 0), (1920, 1080)]
 
 # Default detection level - only render vehicles with license plates
 DETECTION_LEVEL = DetectionLevel.LICENSE_PLATE
+
+DATABASE_URL = 'postgresql://root:root@localhost:5432/car_vision'
+WITHDRAWAL_AMOUNT = 500
