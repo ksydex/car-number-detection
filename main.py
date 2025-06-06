@@ -1,6 +1,7 @@
 import time
 import re
 import warnings
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -12,16 +13,49 @@ from lpr_net.rec_plate import rec_plate, CHARS
 from object_detection.detect_car_YOLO import ObjectDetection
 from track_logic import check_numbers_overlaps
 from detection_level import DetectionLevel
+from entities.user import User
 
 import settings
 from database import SessionLocal
 from services.car_passage_service import CarPassageService
+from services.fixation_result import FixationResult
+from services.passage_enums import PassageResult
+from myutils.drawing_utils import draw_log_panel, generate_log_message
 
 # Игнорируем конкретное предупреждение от PyTorch
 warnings.filterwarnings(
     "ignore",
     message="`torch.cuda.amp.autocast.*is deprecated"
 )
+
+def _generate_log_message(result: FixationResult, plate_text: str) -> Optional[str]:
+    """
+    Формирует лог-сообщение на основе результата фиксации.
+    """
+    status = result.status
+    user = result.user
+
+    if status == PassageResult.ALREADY_PROCESSED_IN_SESSION:
+        return None  # Не спамим лог, если машина уже обработана
+
+    fio = "Неизвестный"
+    if user:
+        fio = f"{user.last_name} {user.first_name[0]}."
+        if user.patronymic:
+            fio += f"{user.patronymic[0]}."
+
+    if status == PassageResult.ARRIVAL:
+        return f"Владелец: {fio}. Зафиксирован въезд."
+    elif status == PassageResult.DEPARTURE_WITH_MONEY_WITHDRAW:
+        return f"Владелец: {fio}. Выезд с оплатой."
+    elif status == PassageResult.DEPARTURE_USER_NO_MONEY:
+        return f"Владелец: {fio}. Выезд (нет средств)."
+    elif status == PassageResult.CAR_NOT_FOUND:
+        # Убираем суффикс, если он есть
+        clean_plate = plate_text.split('_')[0]
+        return f"Автомобиль {clean_plate} не найден."
+    
+    return None
 
 def get_frames(video_src: str) -> np.ndarray:
     """
@@ -129,16 +163,16 @@ def plot_boxes(cars_list: list, frame: np.ndarray) -> np.ndarray:
             colour = car[1][1] if isinstance(car[1], list) else "unknown"
             
             # Draw vehicle info
-            cv2.putText(
-                frame,
-                car_type + " " + colour,
-                (x1_car, y2_car + 15),
-                0,
-                1,
-                car_bgr,
-                thickness=2,
-                lineType=cv2.LINE_AA,
-            )
+            # cv2.putText(
+            #     frame,
+            #     car_type + " " + colour,
+            #     (x1_car, y2_car + 15),
+            #     0,
+            #     1,
+            #     car_bgr,
+            #     thickness=2,
+            #     lineType=cv2.LINE_AA,
+            # )
 
             # Draw license plate box and text
             number_bgr = (255, 255, 255)  # White
@@ -248,6 +282,8 @@ def main(
         return
     # -------------------------
 
+    log_history = []
+
     detector = ObjectDetection(
         yolo_model_path, 
         conf=yolo_conf, 
@@ -313,14 +349,17 @@ def main(
                         not re.match("[A-Z]{1}[0-9]{3}[A-Z]{2}[0-9]{2,3}", plate_text)
                         is None
                     ):
-                        car[0] = [plate_coords, plate_text + "_RUSSIAN_PLATE"]
+                        car[0] = [plate_coords, plate_text + " RU"]
                         # --- Fixate Car Passage ---
                         result = passage_service.fixate_car_passage(plate_text)
-                        print(f"INFO: Passage fixation for plate '{plate_text}': {result.name}")
+                        print(f"INFO: Passage fixation for plate '{plate_text}': {result.status.name}")
+                        
+                        log_message = generate_log_message(result, plate_text)
+                        if log_message:
+                            log_history.append(log_message)
                         # --------------------------
                     else:
-                        car[0] = [plate_coords, plate_text + "_UNDEFINED"]
-
+                        car[0] = [plate_coords, plate_text + ""]
 
                     cars.append(car)
             # Process cars without plates (when detection_level is CAR_ONLY)
@@ -338,6 +377,7 @@ def main(
                     cars.append(car)
 
         drawn_frame = plot_boxes(cars, raw_frame)
+        drawn_frame = draw_log_panel(drawn_frame, log_history)
         proc_frame = preprocess(drawn_frame, settings.FINAL_FRAME_RES)
 
         time_end = time.time()
